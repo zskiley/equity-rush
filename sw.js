@@ -1,5 +1,5 @@
-// Equity Rush offline cache, build c20e18d6
-const CACHE = "equity-rush-c20e18d6";
+// Equity Rush offline cache, build d39c1485
+const CACHE = "equity-rush-d39c1485";
 const CORE = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"];
 const FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
 

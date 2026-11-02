@@ -143,9 +143,12 @@ button:focus-visible, .dc:focus-visible { outline: 2px solid var(--brass); outli
 .qtext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .qtext h2 { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; }
 .stage { font-family: var(--f-display); font-size: 11px; color: var(--brass); letter-spacing: .03em; }
-.timer { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.timerrow { display: flex; align-items: center; gap: 10px; }
+.timer { flex: 1; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .timer i { display: block; height: 100%; width: 100%; background: var(--brass); transform-origin: left center; }
-.timer.low i { background: var(--bad); }
+.worth { font-family: var(--f-led); font-size: 24px; line-height: 1; color: var(--brass); min-width: 3.4ch; text-align: right; font-variant-numeric: tabular-nums; }
+.timerrow.low .timer i { background: var(--bad); }
+.timerrow.low .worth { color: var(--bad); }
 .note { font-size: 12.5px; color: var(--muted); margin: 0; }
 .note.err { color: var(--bad); }
 .big {
@@ -332,7 +335,10 @@ button:focus-visible, .dc:focus-visible { outline: 2px solid var(--brass); outli
         <p class="note" id="note">The clock starts on your first tap.</p>
       </div>
     </div>
-    <div class="timer" id="timer"><i id="timerFill"></i></div>
+    <div class="timerrow" id="timerRow">
+      <div class="timer"><i id="timerFill"></i></div>
+      <output class="worth" id="worth" aria-label="Points for an exact answer right now">+300</output>
+    </div>
 
     <div id="countView">
       <div class="keypad" id="keypad">
@@ -403,7 +409,7 @@ button:focus-visible, .dc:focus-visible { outline: 2px solid var(--brass); outli
       <label class="switch">4-colour deck<input type="checkbox" id="fourChk"></label>
       <label class="switch">Vibrate on taps and misses<input type="checkbox" id="vibeChk"></label>
     </div>
-    <p class="rules">Outs are the river cards that make you the winner. A card that only splits the pot doesn't count, and a dirty out improves you but gives the villain an even better hand. Arcade: exact answers score 100 plus a speed bonus, and exact answers in a row build a combo up to x3. Off by one scores 30. Off by two or more costs a chip.</p>
+    <p class="rules">Outs are the river cards that make you the winner. A card that only splits the pot doesn't count, and a dirty out improves you but gives the villain an even better hand. Arcade gives you 45 seconds a hand, or 60 when tapping the cards. An exact answer scores 50 plus up to 250 for the time you have left, so the faster you are, the more it's worth. Exact answers in a row multiply that, up to x3. Off by one scores a quarter of it. Off by two or more costs a chip.</p>
     <div class="row2">
       <button class="ghost" type="button" id="closeSheet">Back to game</button>
       <button class="primary" type="button" id="startRun">Start new run</button>
@@ -560,11 +566,11 @@ function analyze(hero, vil, board) {
 
 const LEVELS = [
   null,
-  { name: "Clean draws", blurb: "One draw at a time: flush draws, open-enders and gutshots.", time: 20 },
-  { name: "Combo draws", blurb: "Flush and straight draws together. Count each card once.", time: 20 },
-  { name: "Dirty outs", blurb: "Some of your cards give the villain an even better hand.", time: 18 },
-  { name: "Sneaky outs", blurb: "Overcards, two pair and trips can win too.", time: 18 },
-  { name: "Anything goes", blurb: "Every kind of spot, sometimes drawing dead.", time: 15 },
+  { name: "Clean draws", blurb: "One draw at a time: flush draws, open-enders and gutshots." },
+  { name: "Combo draws", blurb: "Flush and straight draws together. Count each card once." },
+  { name: "Dirty outs", blurb: "Some of your cards give the villain an even better hand." },
+  { name: "Sneaky outs", blurb: "Overcards, two pair and trips can win too." },
+  { name: "Anything goes", blurb: "Every kind of spot, sometimes drawing dead." },
 ];
 
 function matchesLevel(lv, a) {
@@ -672,8 +678,12 @@ function explain(a) {
     limit: 20, timeLeft: 20, armed: false, timerOn: false, sheetOpen: false, bonusDone: false,
   };
 
+  const COUNT_TIME = 45, PICK_TIME = 60;
+  const BASE_PTS = 50, TIME_PTS = 250;
   const buzz = p => { if (!S.vibe) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
   const mult = streak => 1 + 0.5 * Math.min(streak, 4);
+  // What an exact answer is worth right now, before the combo multiplier.
+  const worthNow = () => Math.round(BASE_PTS + TIME_PTS * Math.max(0, S.timeLeft / S.limit));
   const arcadeLevel = hand => (hand <= 3 ? 1 : hand <= 6 ? 2 : hand <= 9 ? 3 : hand <= 12 ? 4 : 5);
 
   /* ---------- rendering ---------- */
@@ -764,11 +774,12 @@ function explain(a) {
 
   function renderTimer() {
     const arc = S.game === "arcade" && S.phase === "play";
-    $("timer").hidden = !arc;
+    $("timerRow").hidden = !arc;
     if (!arc) return;
     const f = Math.max(0, S.timeLeft / S.limit);
     $("timerFill").style.transform = `scaleX(${f})`;
-    $("timer").classList.toggle("low", S.timeLeft <= 5);
+    $("worth").textContent = "+" + Math.round(worthNow() * mult(S.streak));
+    $("timerRow").classList.toggle("low", S.timeLeft <= 10);
   }
 
   function showPlay() {
@@ -800,21 +811,21 @@ function explain(a) {
   }
 
   /* ---------- timer ---------- */
-  let raf = 0, lastT = 0;
+  let tickId = 0, lastT = 0;
   function startTimer() {
     if (S.timerOn || S.game !== "arcade" || S.phase !== "play" || S.sheetOpen || document.hidden) return;
     S.timerOn = true;
     lastT = performance.now();
-    raf = requestAnimationFrame(tick);
+    tickId = setInterval(tick, 100);
   }
-  function stopTimer() { S.timerOn = false; cancelAnimationFrame(raf); }
-  function tick(t) {
+  function stopTimer() { S.timerOn = false; clearInterval(tickId); }
+  function tick() {
     if (!S.timerOn) return;
+    const t = performance.now();
     S.timeLeft = Math.max(0, S.timeLeft - (t - lastT) / 1000);
     lastT = t;
     renderTimer();
-    if (S.timeLeft <= 0) { stopTimer(); lock(true); return; }
-    raf = requestAnimationFrame(tick);
+    if (S.timeLeft <= 0) { stopTimer(); lock(true); }
   }
   function arm() {
     if (S.game !== "arcade" || S.phase !== "play") return;
@@ -841,7 +852,7 @@ function explain(a) {
     S.entry = "";
     S.picks = new Set();
     S.phase = "play";
-    S.limit = LEVELS[lv].time + (S.style === "pick" ? 10 : 0);
+    S.limit = S.style === "pick" ? PICK_TIME : COUNT_TIME;
     S.timeLeft = S.limit;
     renderTable(true);
     showPlay();
@@ -880,14 +891,15 @@ function explain(a) {
     let pts = 0;
     if (errors === 0) {
       const m = mult(S.streak);
-      const speed = arc ? Math.round(S.timeLeft * 5) : 0;
-      pts = Math.round((100 + speed) * m);
+      const worth = arc ? worthNow() : 0;
+      pts = Math.round(worth * m);
       S.streak++;
       S.exact++;
-      if (arc) sub += ` · 100${speed ? ` + ${speed} speed` : ""}${m > 1 ? ` × ${m} combo` : ""}`;
+      if (arc) sub += ` · ${BASE_PTS} + ${worth - BASE_PTS} time${m > 1 ? ` × ${m} combo` : ""}`;
       buzz(18);
     } else if (errors === 1) {
-      pts = 30;
+      pts = arc ? Math.round(worthNow() / 4) : 0;
+      if (arc) sub += " · quarter points";
       if (S.streak > 1 && arc) sub += " · combo reset";
       S.streak = 0;
       buzz([25, 40, 25]);
