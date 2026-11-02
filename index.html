@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07241c">
+<meta name="description" content="Arcade game for counting poker outs on the turn.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+</head>
+<body>
+<title>Equity Rush</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=VT323&display=swap">
+<style>
+/* Layout: phone-first single column. Scoreboard bar, felt table, answer console, and a thumb-reach action bar pinned to the bottom edge. */
+:root {
+  --bg: #07241c;
+  --felt: #11493a;
+  --felt-edge: #0b3529;
+  --rail: #2a1a10;
+  --sheet: #0c3127;
+  --line: rgba(243, 236, 217, .15);
+  --line-2: rgba(243, 236, 217, .32);
+  --ink: #f3ecd9;
+  --muted: #a3bfb2;
+  --brass: #eab54d;
+  --brass-ink: #2b1a04;
+  --brass-deep: #a87a22;
+  --rival: #86cdee;
+  --card: #fbf6e9;
+  --card-ink: #1c1b19;
+  --red: #c9252d;
+  --blue: #1f62cc;
+  --green: #16813c;
+  --suit-on-felt: #ff8a7e;
+  --good: #8be394;
+  --good-ink: #0d3b1a;
+  --warn: #f2c450;
+  --warn-ink: #3d2c00;
+  --bad: #ff7466;
+  --bad-ink: #4a0f08;
+  --f-display: "Bungee", "Arial Black", Impact, sans-serif;
+  --f-body: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-led: "VT323", ui-monospace, "Roboto Mono", monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+button:focus-visible, .dc:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.app {
+  max-width: 520px;
+  margin: 0 auto;
+  padding-block: 10px calc(96px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Scoreboard bar */
+.bar { display: flex; align-items: center; gap: 10px; }
+.iconbtn {
+  width: 44px; height: 44px; flex: none; cursor: pointer;
+  border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .25);
+  display: grid; place-items: center;
+}
+.iconbtn svg { width: 20px; height: 20px; }
+.logo { margin: 0; flex: 1; min-width: 0; font-family: var(--f-display); font-weight: 400; font-size: 16px; line-height: .95; letter-spacing: .02em; }
+.logo span { display: block; color: var(--brass); }
+.hud { display: flex; gap: 6px; }
+.stat { background: rgba(0, 0, 0, .28); border: 1px solid var(--line); border-radius: 10px; padding: 3px 9px 0; min-width: 50px; }
+.stat b { display: block; font-size: 9.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.stat output { display: block; font-family: var(--f-led); font-size: 23px; line-height: 1.05; color: var(--brass); font-variant-numeric: tabular-nums; }
+.lives { display: flex; gap: 3px; height: 24px; align-items: center; }
+.life { width: 13px; height: 13px; border-radius: 50%; background: var(--bad); border: 2px dashed var(--card); box-sizing: border-box; transition: opacity .3s, transform .3s; }
+.life.lost { opacity: .18; transform: scale(.8); }
+
+/* Felt table */
+.table {
+  container-type: inline-size;
+  background: radial-gradient(120% 90% at 50% 45%, var(--felt) 0%, var(--felt-edge) 100%);
+  border: 8px solid var(--rail);
+  border-radius: 44px;
+  padding: 10px 8px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05), 0 8px 22px rgba(0, 0, 0, .35);
+}
+/* Cards stay centred over the board; who-and-what sits to the right */
+.seat { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.seat .hand { grid-column: 2; }
+.who { grid-column: 3; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.seat-top { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; }
+.made { font-family: var(--f-led); font-size: 18px; line-height: 1; color: var(--c); }
+.hand, .board { display: flex; gap: 5px; justify-content: center; }
+.card, .slot { --cw: min(14.5vw, 56px, 7vh); width: var(--cw); aspect-ratio: 5 / 7; border-radius: calc(var(--cw) * .12); box-sizing: border-box; }
+.picking .card, .picking .slot { --cw: min(11.5vw, 44px, 5.4vh); }
+@container (min-width: 0px) {
+  .card, .slot { --cw: min(17cqw, 56px, 7vh); }
+  .picking .card, .picking .slot { --cw: min(13cqw, 44px, 5.4vh); }
+}
+@supports (height: 1svh) {
+  @container (min-width: 0px) {
+    .card, .slot { --cw: min(17cqw, 56px, 7svh); }
+    .picking .card, .picking .slot { --cw: min(13cqw, 44px, 5.4svh); }
+  }
+}
+.card {
+  background: var(--card); color: var(--card-ink);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: calc(var(--cw) * .07) calc(var(--cw) * .1);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .35), 0 6px 12px rgba(0, 0, 0, .22);
+}
+.card .r { font-weight: 700; font-size: calc(var(--cw) * .4); line-height: 1; }
+.card .su { font-size: calc(var(--cw) * .46); line-height: 1; align-self: flex-end; }
+.card.s1, .card.s2 { color: var(--red); }
+.four .card.s2 { color: var(--blue); }
+.four .card.s3 { color: var(--green); }
+.slot { border: 1.5px dashed var(--line-2); display: grid; place-items: center; font-family: var(--f-led); font-size: calc(var(--cw) * .55); color: var(--line-2); }
+.card.deal { animation: deal .32s ease-out both; }
+@keyframes deal { from { transform: translateY(-12px) rotate(-5deg); opacity: 0; } }
+
+/* Console */
+.console { background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 10px; }
+.playtop { display: flex; align-items: center; gap: 12px; }
+.qtext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qtext h2 { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; }
+.stage { font-family: var(--f-display); font-size: 11px; color: var(--brass); letter-spacing: .03em; }
+.timer { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.timer i { display: block; height: 100%; width: 100%; background: var(--brass); transform-origin: left center; }
+.timer.low i { background: var(--bad); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.note.err { color: var(--bad); }
+.big {
+  flex: none; font-family: var(--f-led); font-size: 58px; line-height: .8; color: var(--brass);
+  min-width: 2.4ch; text-align: center; font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, .32); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px 2px;
+}
+.big.shake { animation: shake .35s; border-color: var(--bad); }
+@keyframes shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.key {
+  height: clamp(42px, 6vh, 54px); border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05);
+  font-family: var(--f-led); font-size: 34px; line-height: 1; cursor: pointer;
+  transition: transform .06s, background .1s;
+}
+.key:active { background: rgba(234, 181, 77, .25); transform: scale(.96); }
+.key.fn { font-family: var(--f-body); font-size: 15px; font-weight: 500; color: var(--muted); }
+
+/* The 52-card deck grid, split A–8 and 7–2 so cells stay thumb-sized */
+.deck { display: flex; flex-direction: column; gap: 8px; }
+.dblock { display: grid; grid-template-columns: 16px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: center; }
+.dsuit { font-size: 15px; text-align: center; color: var(--ink); }
+.dsuit.s1, .dsuit.s2 { color: var(--suit-on-felt); }
+.dc {
+  height: clamp(32px, 4.8vh, 40px); padding: 0; position: relative;
+  border-radius: 7px; border: 2px solid transparent; background: var(--card); color: var(--card-ink);
+  display: flex; align-items: center; justify-content: center; gap: 1px;
+  font-weight: 700; font-size: 15px; line-height: 1; cursor: pointer;
+}
+.dc small { font-size: 12px; font-weight: 400; }
+.dc.s1, .dc.s2 { color: var(--red); }
+.four .dc.s2 { color: var(--blue); }
+.four .dc.s3 { color: var(--green); }
+.dc.dead { background: rgba(243, 236, 217, .07); color: rgba(243, 236, 217, .28); cursor: default; }
+.dc.picked { background: #f6d58a; border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
+.dc.blank { opacity: .42; }
+.dc.out { background: var(--good); color: var(--good-ink); }
+.dc.dirty { background: var(--bad); color: var(--bad-ink); text-decoration: line-through; }
+.dc.chop { background: var(--warn); color: var(--warn-ink); }
+.dc.missed { background: transparent; border: 2px dashed var(--good); color: var(--good); }
+.dc.wrong { background: transparent; border: 2px solid var(--bad); color: var(--bad); }
+.dc.hit::after, .dc.wrong::after { position: absolute; top: 1px; right: 3px; font-size: 10px; font-weight: 700; }
+.dc.hit::after { content: "✓"; }
+.dc.wrong::after { content: "✕"; }
+
+/* Reveal */
+.rhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.verdict { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 30px; line-height: 1; animation: pop .4s cubic-bezier(.2, 1.4, .4, 1); }
+.verdict.good { color: var(--good); }
+.verdict.warn { color: var(--warn); }
+.verdict.bad { color: var(--bad); }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } }
+.pts { font-family: var(--f-led); font-size: 40px; line-height: .8; color: var(--brass); white-space: nowrap; }
+.rsub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; box-sizing: border-box; }
+.hint { background: rgba(234, 181, 77, .09); border: 1px solid rgba(234, 181, 77, .32); border-radius: 12px; padding: 10px 12px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+.hint p { margin: 0; }
+.hint .quick { font-family: var(--f-led); font-size: 20px; line-height: 1.1; color: var(--brass); }
+.bonus { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.bonus p { margin: 0; font-size: 14px; }
+.bopts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.bopt { height: 46px; border-radius: 12px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, .05); font-family: var(--f-led); font-size: 26px; cursor: pointer; }
+.bopt.right { background: var(--good); color: var(--good-ink); border-color: var(--good); }
+.bopt.wrongpick { background: transparent; color: var(--bad); border-color: var(--bad); }
+.bonus .bres { font-size: 13px; color: var(--muted); }
+
+/* Game over */
+.ohead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.badge { font-family: var(--f-display); font-size: 11px; background: var(--brass); color: var(--brass-ink); padding: 5px 10px; border-radius: 999px; }
+.ogrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ocell { background: rgba(0, 0, 0, .28); border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px; }
+.ocell b { display: block; font-size: 10px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.ocell output { font-family: var(--f-led); font-size: 30px; line-height: 1.05; }
+.lbars { display: flex; flex-direction: column; gap: 6px; }
+.lbar { display: grid; grid-template-columns: 112px minmax(0, 1fr) 44px; gap: 8px; align-items: center; font-size: 13px; }
+.lbar .tk { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.lbar .tk i { display: block; height: 100%; }
+.lbar output { font-family: var(--f-led); font-size: 19px; text-align: right; }
+.ghost { height: 48px; border-radius: 14px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, .04); font-weight: 500; cursor: pointer; }
+
+/* Pinned action bar */
+.actionbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: linear-gradient(to top, var(--bg) 72%, rgba(7, 36, 28, 0));
+  padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.actionbar .inner { max-width: 520px; margin: 0 auto; }
+.primary {
+  width: 100%; height: 58px; border: 0; border-radius: 16px; cursor: pointer;
+  background: var(--brass); color: var(--brass-ink);
+  font-family: var(--f-display); font-size: 19px; letter-spacing: .03em;
+  box-shadow: 0 4px 0 var(--brass-deep);
+}
+.primary:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--brass-deep); }
+
+/* Level toast */
+.toast {
+  position: fixed; z-index: 30; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+  width: min(calc(100vw - 32px), 420px); box-sizing: border-box;
+  background: var(--brass); color: var(--brass-ink); border-radius: 16px; padding: 10px 16px; text-align: center;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45); animation: drop .35s ease-out;
+}
+.toast strong { display: block; font-family: var(--f-display); font-weight: 400; font-size: 16px; }
+.toast span { font-size: 13px; }
+@keyframes drop { from { transform: translate(-50%, -20px); opacity: 0; } }
+
+/* Menu sheet */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .58); }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 88vh; overflow-y: auto;
+  background: var(--sheet); border-top: 1px solid var(--line); border-radius: 22px 22px 0 0;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  animation: rise .25s ease-out;
+}
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } }
+.sheet .inner { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line-2); margin: 0 auto 4px; }
+.sheet h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 18px; }
+.group { display: flex; flex-direction: column; gap: 6px; }
+.group > b { font-size: 11px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 14px; padding: 3px; }
+.seg button { height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); font-weight: 500; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.levels { display: flex; flex-direction: column; gap: 6px; }
+.lvl { text-align: left; border: 1px solid var(--line); background: rgba(0, 0, 0, .22); border-radius: 12px; padding: 9px 12px; cursor: pointer; display: grid; grid-template-columns: 28px 1fr; gap: 2px 8px; }
+.lvl .n { grid-row: span 2; font-family: var(--f-led); font-size: 28px; line-height: 1; color: var(--muted); }
+.lvl .t { font-weight: 700; font-size: 14px; }
+.lvl .d { font-size: 12.5px; color: var(--muted); }
+.lvl[aria-pressed="true"] { border-color: var(--brass); background: rgba(234, 181, 77, .1); }
+.lvl[aria-pressed="true"] .n { color: var(--brass); }
+.levels.off { opacity: .45; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.switch input { width: 22px; height: 22px; accent-color: var(--brass); }
+.sheet .rules { font-size: 13px; color: var(--muted); margin: 0; }
+.sheet .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sheet .primary { height: 50px; font-size: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media (max-width: 400px) {
+  .logo { display: none; }
+  .hud { flex: 1; }
+  .stat { flex: 1; }
+}
+@media (min-width: 700px) {
+  .logo { font-size: 20px; }
+}
+</style>
+
+<div class="app" id="app">
+  <header class="bar">
+    <button class="iconbtn" id="menuBtn" type="button" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <h1 class="logo">Equity<span>Rush</span></h1>
+    <div class="hud">
+      <div class="stat"><b id="l1">Score</b><output id="v1">0</output></div>
+      <div class="stat"><b id="l2">Combo</b><output id="v2">x1</output></div>
+      <div class="stat"><b id="l3">Lives</b><div class="lives" id="lives"><i class="life"></i><i class="life"></i><i class="life"></i></div><output id="v3" hidden>0</output></div>
+    </div>
+  </header>
+
+  <section class="table" aria-label="Table">
+    <div class="seat" style="--c: var(--rival)">
+      <div class="hand" id="vilHand"></div>
+      <div class="who"><span class="seat-top"><i class="dot"></i>Villain</span><span class="made" id="vilMade"></span></div>
+    </div>
+    <div class="board" id="board" aria-label="Board, turn dealt, river to come"></div>
+    <div class="seat" style="--c: var(--brass)">
+      <div class="hand" id="heroHand"></div>
+      <div class="who"><span class="seat-top"><i class="dot"></i>You</span><span class="made" id="heroMade"></span></div>
+    </div>
+  </section>
+
+  <section class="console" id="console" aria-live="polite">
+    <div id="playTop" class="playtop">
+      <output class="big" id="entry">–</output>
+      <div class="qtext">
+        <h2 id="question">How many outs?</h2>
+        <span class="stage" id="stage">Level 1 · Clean draws</span>
+        <p class="note" id="note">The clock starts on your first tap.</p>
+      </div>
+    </div>
+    <div class="timer" id="timer"><i id="timerFill"></i></div>
+
+    <div id="countView">
+      <div class="keypad" id="keypad">
+        <button class="key" type="button" data-k="1">1</button><button class="key" type="button" data-k="2">2</button><button class="key" type="button" data-k="3">3</button>
+        <button class="key" type="button" data-k="4">4</button><button class="key" type="button" data-k="5">5</button><button class="key" type="button" data-k="6">6</button>
+        <button class="key" type="button" data-k="7">7</button><button class="key" type="button" data-k="8">8</button><button class="key" type="button" data-k="9">9</button>
+        <button class="key fn" type="button" data-k="clear">Clear</button><button class="key" type="button" data-k="0">0</button><button class="key fn" type="button" data-k="back" aria-label="Delete last digit">⌫</button>
+      </div>
+    </div>
+
+    <div id="pickView" hidden>
+      <div class="deck" id="pickDeck"></div>
+    </div>
+
+    <div id="revealView" hidden style="display:flex;flex-direction:column;gap:10px">
+      <div class="rhead">
+        <div>
+          <h2 class="verdict" id="verdict">Exact</h2>
+          <p class="rsub" id="verdictSub"></p>
+        </div>
+        <output class="pts" id="points"></output>
+      </div>
+      <div class="deck" id="revealDeck"></div>
+      <div class="legend" id="legend"></div>
+      <div class="hint" id="hint"></div>
+      <div class="bonus" id="bonus">
+        <p id="bonusQ"></p>
+        <div class="bopts" id="bonusOpts"></div>
+        <p class="bres" id="bonusRes"></p>
+      </div>
+    </div>
+
+    <div id="overView" hidden style="display:flex;flex-direction:column;gap:12px">
+      <div class="ohead"><h2 class="verdict bad">Out of chips</h2><span class="badge" id="newBest" hidden>New best</span></div>
+      <div class="ogrid">
+        <div class="ocell"><b>Score</b><output id="oScore" style="color:var(--brass)">0</output></div>
+        <div class="ocell"><b>Best</b><output id="oBest">0</output></div>
+        <div class="ocell"><b>Exact</b><output id="oExact">0 / 0</output></div>
+        <div class="ocell"><b>Best combo</b><output id="oCombo">0</output></div>
+      </div>
+      <p class="note">Exact answers by level</p>
+      <div class="lbars" id="lbars"></div>
+      <div class="hint" id="overHint"></div>
+      <button class="ghost" type="button" id="practiceWeak">Practise this level</button>
+    </div>
+  </section>
+</div>
+
+<div class="actionbar"><div class="inner"><button class="primary" type="button" id="action">Lock in</button></div></div>
+
+<div class="toast" id="toast" hidden role="status"><strong id="toastT"></strong><span id="toastD"></span></div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="inner">
+    <div class="grab" aria-hidden="true"></div>
+    <h2 id="sheetTitle">Game setup</h2>
+    <div class="group"><b>Mode</b>
+      <div class="seg" id="gameSeg"><button type="button" data-v="arcade">Arcade</button><button type="button" data-v="practice">Practice</button></div>
+    </div>
+    <div class="group"><b>Answer by</b>
+      <div class="seg" id="styleSeg"><button type="button" data-v="count">Typing the count</button><button type="button" data-v="pick">Tapping the cards</button></div>
+    </div>
+    <div class="group"><b id="levelsLabel">Practice level</b>
+      <div class="levels" id="levels"></div>
+    </div>
+    <div class="group"><b>Settings</b>
+      <label class="switch">4-colour deck<input type="checkbox" id="fourChk"></label>
+      <label class="switch">Vibrate on taps and misses<input type="checkbox" id="vibeChk"></label>
+    </div>
+    <p class="rules">Outs are the river cards that make you the winner. A card that only splits the pot doesn't count, and a dirty out improves you but gives the villain an even better hand. Arcade: exact answers score 100 plus a speed bonus, and exact answers in a row build a combo up to x3. Off by one scores 30. Off by two or more costs a chip.</p>
+    <div class="row2">
+      <button class="ghost" type="button" id="closeSheet">Back to game</button>
+      <button class="primary" type="button" id="startRun">Start new run</button>
+    </div>
+  </div>
+</div>
+
+<script id="engine">
+const RANKS = "23456789TJQKA";
+const SUITS = "shdc";
+const SYM = ["♠", "♥", "♦", "♣"];
+const RN = ["two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "jack", "queen", "king", "ace"];
+const RP = ["twos", "threes", "fours", "fives", "sixes", "sevens", "eights", "nines", "tens", "jacks", "queens", "kings", "aces"];
+const CAP = s => s[0].toUpperCase() + s.slice(1);
+
+const CNT = new Int8Array(13);
+const SM = new Int32Array(4);
+
+function bits(x) { let n = 0; while (x) { x &= x - 1; n++; } return n; }
+
+// Highest card of a five-in-a-row in a 13-bit rank mask, 3 for the wheel, -1 for none.
+function straightHigh(m) {
+  for (let h = 12; h >= 4; h--) if (((m >> (h - 4)) & 31) === 31) return h;
+  if ((m & 0x100F) === 0x100F) return 3;
+  return -1;
+}
+
+function topN(m, n) {
+  let v = 0;
+  for (let r = 12; r >= 0 && n > 0; r--) if ((m >> r) & 1) { v = (v << 4) | r; n--; }
+  return v;
+}
+
+// Best five-card value of 5–7 cards. Category sits in bits 20+, so values compare directly.
+function evaluate(cs, len) {
+  CNT.fill(0); SM.fill(0);
+  let all = 0;
+  for (let i = 0; i < len; i++) { const c = cs[i], r = c >> 2; CNT[r]++; SM[c & 3] |= 1 << r; all |= 1 << r; }
+  let fl = 0;
+  for (let s = 0; s < 4; s++) if (bits(SM[s]) >= 5) fl = SM[s];
+  if (fl) { const h = straightHigh(fl); if (h >= 0) return (8 << 20) | h; }
+  let q = -1, t1 = -1, t2 = -1, p1 = -1, p2 = -1;
+  for (let r = 12; r >= 0; r--) {
+    const n = CNT[r];
+    if (n === 4) q = r;
+    else if (n === 3) { if (t1 < 0) t1 = r; else if (t2 < 0) t2 = r; }
+    else if (n === 2) { if (p1 < 0) p1 = r; else if (p2 < 0) p2 = r; }
+  }
+  if (q >= 0) return (7 << 20) | (q << 16) | (topN(all & ~(1 << q), 1) << 12);
+  if (t1 >= 0 && (t2 >= 0 || p1 >= 0)) return (6 << 20) | (t1 << 16) | (Math.max(t2, p1) << 12);
+  if (fl) return (5 << 20) | topN(fl, 5);
+  const st = straightHigh(all);
+  if (st >= 0) return (4 << 20) | st;
+  if (t1 >= 0) return (3 << 20) | (t1 << 16) | (topN(all & ~(1 << t1), 2) << 8);
+  if (p2 >= 0) return (2 << 20) | (p1 << 16) | (p2 << 12) | (topN(all & ~(1 << p1) & ~(1 << p2), 1) << 8);
+  if (p1 >= 0) return (1 << 20) | (p1 << 16) | (topN(all & ~(1 << p1), 3) << 4);
+  return topN(all, 5);
+}
+
+function cardLabel(c) { return RANKS[c >> 2] + SYM[c & 3]; }
+function parseCard(s) { return RANKS.indexOf(s[0]) * 4 + SUITS.indexOf(s[1]); }
+
+function handLabel(v) {
+  const cat = v >> 20, a = (v >> 16) & 15, b = (v >> 12) & 15;
+  switch (cat) {
+    case 0: return CAP(RN[a]) + " high";
+    case 1: return "Pair of " + RP[a];
+    case 2: return `Two pair, ${RP[a]} and ${RP[b]}`;
+    case 3: return "Three " + RP[a];
+    case 4: return CAP(RN[v & 15]) + "-high straight";
+    case 5: return CAP(RN[a]) + "-high flush";
+    case 6: return `${CAP(RP[a])} full of ${RP[b]}`;
+    case 7: return "Four " + RP[a];
+    default: return (v & 15) === 12 ? "Royal flush" : CAP(RN[v & 15]) + "-high straight flush";
+  }
+}
+
+// Hands people actually play: every pair, most suited aces and broadways, suited connectors, offsuit broadways.
+const PLAYABLE = (() => {
+  const out = [];
+  const sMin = { 12: 0, 11: 0, 10: 3, 9: 5, 8: 5, 7: 5, 6: 4, 5: 3, 4: 3, 3: 2 };
+  const oMin = { 12: 0, 11: 7, 10: 7, 9: 7, 8: 7 };
+  for (let hi = 12; hi >= 0; hi--) for (let lo = hi; lo >= 0; lo--) {
+    if (lo === hi) { out.push([hi, lo, false]); continue; }
+    if (sMin[hi] !== undefined && lo >= sMin[hi]) out.push([hi, lo, true]);
+    if (oMin[hi] !== undefined && lo >= oMin[hi]) out.push([hi, lo, false]);
+  }
+  return out;
+})();
+
+const rnd = n => Math.floor(Math.random() * n);
+
+function dealClass(cls, used) {
+  const [hi, lo, suited] = cls;
+  for (let t = 0; t < 40; t++) {
+    const s1 = rnd(4);
+    let s2 = suited ? s1 : rnd(4);
+    if (!suited && s2 === s1) continue;
+    const a = hi * 4 + s1, b = lo * 4 + s2;
+    if (a === b || used.has(a) || used.has(b)) continue;
+    return [a, b];
+  }
+  return null;
+}
+
+// Classify every unseen river card for a turn spot where you are behind.
+//   out   – you win outright
+//   chop  – you split
+//   dirty – you'd now beat the villain's turn hand, but the same card gives them something better
+//   blank – nothing useful
+function analyze(hero, vil, board) {
+  const used = new Set([...hero, ...vil, ...board]);
+  const H = [...hero, ...board], V = [...vil, ...board];
+  const h6 = evaluate(H, 6), v6 = evaluate(V, 6);
+  const a = {
+    hero, vil, board, h6, v6, behind: h6 < v6,
+    status: new Array(52).fill("dead"), heroCat: new Array(52).fill(-1), vilCat: new Array(52).fill(-1),
+    outs: 0, dirty: 0, chops: 0, outList: [], dirtyList: [], chopList: [], overlapList: [],
+    improving: 0, flushI: 0, straightI: 0, overlap: 0, pairI: 0, chopsI: 0,
+  };
+  if (!a.behind) return a;
+  let heroMask = 0;
+  for (const c of H) heroMask |= 1 << (c >> 2);
+  const hadStraight = straightHigh(heroMask);
+  const H7 = [...H, 0], V7 = [...V, 0];
+  for (let c = 0; c < 52; c++) {
+    if (used.has(c)) continue;
+    H7[6] = c; V7[6] = c;
+    const hs = evaluate(H7, 7), vs = evaluate(V7, 7);
+    a.heroCat[c] = hs >> 20; a.vilCat[c] = vs >> 20;
+    let st = "blank";
+    if (hs > vs) st = "out";
+    else if (hs === vs) st = "chop";
+    else if (hs > v6) st = "dirty";
+    a.status[c] = st;
+    if (st === "out") { a.outs++; a.outList.push(c); }
+    else if (st === "dirty") { a.dirty++; a.dirtyList.push(c); }
+    else if (st === "chop") { a.chops++; a.chopList.push(c); }
+    if (hs > v6) {
+      a.improving++;
+      const cat = hs >> 20;
+      const isFlush = cat === 5 || cat === 8;
+      const newHigh = straightHigh(heroMask | (1 << (c >> 2)));
+      const isStraight = (cat === 4 || isFlush) && newHigh > hadStraight;
+      if (isFlush) a.flushI++;
+      if (isStraight) a.straightI++;
+      if (isFlush && isStraight) { a.overlap++; a.overlapList.push(c); }
+      if (!isFlush && !isStraight) a.pairI++;
+      if (st === "chop") a.chopsI++;
+    }
+  }
+  return a;
+}
+
+const LEVELS = [
+  null,
+  { name: "Clean draws", blurb: "One draw at a time: flush draws, open-enders and gutshots.", time: 20 },
+  { name: "Combo draws", blurb: "Flush and straight draws together. Count each card once.", time: 20 },
+  { name: "Dirty outs", blurb: "Some of your cards give the villain an even better hand.", time: 18 },
+  { name: "Sneaky outs", blurb: "Overcards, two pair and trips can win too.", time: 18 },
+  { name: "Anything goes", blurb: "Every kind of spot, sometimes drawing dead.", time: 15 },
+];
+
+function matchesLevel(lv, a) {
+  if (!a.behind) return false;
+  switch (lv) {
+    case 1: return a.outs >= 4 && a.dirty === 0 && a.chops === 0 && a.pairI === 0 && a.overlap === 0 && ((a.flushI > 0) !== (a.straightI > 0));
+    case 2: return a.dirty === 0 && a.chops === 0 && a.pairI === 0 && a.flushI > 0 && a.straightI > a.overlap && a.overlap > 0;
+    case 3: return a.dirty >= 1 && a.outs >= 2;
+    case 4: return a.pairI >= 3 && a.outs >= 3;
+    default: return a.outs > 0 || Math.random() < 0.12;
+  }
+}
+
+function genSpot(lv, maxTries = 40000) {
+  let fallback = null;
+  for (let t = 0; t < maxTries; t++) {
+    const used = new Set();
+    const hero = dealClass(PLAYABLE[rnd(PLAYABLE.length)], used);
+    if (!hero) continue;
+    hero.forEach(c => used.add(c));
+    const vil = dealClass(PLAYABLE[rnd(PLAYABLE.length)], used);
+    if (!vil) continue;
+    vil.forEach(c => used.add(c));
+    const board = [];
+    while (board.length < 4) { const c = rnd(52); if (!used.has(c)) { used.add(c); board.push(c); } }
+    if (evaluate([...hero, ...board], 6) >= evaluate([...vil, ...board], 6)) continue;
+    const a = analyze(hero, vil, board);
+    if (!fallback && a.outs >= 4) fallback = a;
+    if (matchesLevel(lv, a)) return a;
+  }
+  return fallback;
+}
+
+const CAT_FOR = { 8: "for a straight flush", 5: "for a flush", 4: "for a straight", 7: "for quads", 6: "for a full house", 3: "for trips", 2: "for two pair", 1: "for a better pair", 0: "for a better high card" };
+const CAT_SHORT = ["high card", "a pair", "two pair", "trips", "a straight", "a flush", "a full house", "quads", "a straight flush"];
+const cardsText = list => [...list].sort((x, y) => (y >> 2) - (x >> 2) || (x & 3) - (y & 3)).map(cardLabel).join(" ");
+const plural = (n, one, many) => (n === 1 ? one : many);
+
+// Plain-language breakdown of a spot for the reveal screen.
+function explain(a) {
+  const lines = [];
+  let quick = "";
+  if (a.outs === 0) {
+    lines.push("No river card wins, so you're drawing dead.");
+  } else {
+    const groups = {};
+    a.outList.forEach(c => (groups[a.heroCat[c]] = groups[a.heroCat[c]] || []).push(c));
+    const parts = [8, 5, 4, 7, 6, 3, 2, 1, 0].filter(k => groups[k]).map(k => `${groups[k].length} ${CAT_FOR[k]} (${cardsText(groups[k])})`);
+    lines.push(`Your ${a.outs} ${plural(a.outs, "out", "outs")}: ${parts.join(", ")}.`);
+  }
+  if (a.overlap > 0 && a.straightI > a.overlap) {
+    const n = a.overlapList.length;
+    lines.push(`${cardsText(a.overlapList)} ${plural(n, "makes", "make")} both a flush and a straight, so count ${plural(n, "it", "them")} once.`);
+  }
+  if (a.dirty > 0) {
+    const byKey = {};
+    a.dirtyList.forEach(c => { const k = a.heroCat[c] + "|" + a.vilCat[c]; (byKey[k] = byKey[k] || []).push(c); });
+    Object.entries(byKey).forEach(([k, list]) => {
+      const [hc, vc] = k.split("|").map(Number);
+      lines.push(`${cardsText(list)} ${plural(list.length, "gives", "give")} you ${CAT_SHORT[hc]}, but the villain makes ${CAT_SHORT[vc]}. Dirty, so ${plural(list.length, "it doesn't", "they don't")} count.`);
+    });
+  }
+  if (a.chops > 0) {
+    const n = a.chops;
+    lines.push(`${cardsText(a.chopList)} only ${plural(n, "splits", "split")} the pot, so ${plural(n, "it doesn't", "they don't")} count.`);
+  }
+  const comps = [];
+  if (a.flushI) comps.push(`${a.flushI} flush ${plural(a.flushI, "card", "cards")}`);
+  if (a.straightI) comps.push(`${a.straightI} straight ${plural(a.straightI, "card", "cards")}`);
+  if (a.pairI) comps.push(`${a.pairI} pairing ${plural(a.pairI, "card", "cards")}`);
+  const minus = [];
+  if (a.overlap) minus.push(`${a.overlap} counted twice`);
+  if (a.dirty) minus.push(`${a.dirty} dirty`);
+  if (a.chopsI) minus.push(`${a.chopsI} ${plural(a.chopsI, "chop", "chops")}`);
+  if (comps.length && (comps.length > 1 || minus.length)) {
+    quick = comps.join(" + ") + minus.map(m => " − " + m).join("") + ` = ${a.outs}`;
+  }
+  return { lines, quick };
+}
+</script>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const RANK_WORD = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king", "ace"];
+  const SUIT_WORD = ["spades", "hearts", "diamonds", "clubs"];
+  const cardName = c => `${RANK_WORD[c >> 2]} of ${SUIT_WORD[c & 3]}`;
+  const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const freshLevels = () => ({ 1: { n: 0, ok: 0 }, 2: { n: 0, ok: 0 }, 3: { n: 0, ok: 0 }, 4: { n: 0, ok: 0 }, 5: { n: 0, ok: 0 } });
+  const S = {
+    game: store.get("er.game", "arcade"),
+    level: store.get("er.level", 1),
+    style: store.get("er.style", "count"),
+    four: store.get("er.four", false),
+    vibe: store.get("er.vibe", true),
+    best: store.get("er.best", 0),
+    bestAtStart: 0,
+    score: 0, lives: 3, hand: 0, done: 0, exact: 0, streak: 0, bestStreak: 0, perLevel: freshLevels(),
+    phase: "play", spot: null, curLevel: 1, entry: "", picks: new Set(),
+    limit: 20, timeLeft: 20, armed: false, timerOn: false, sheetOpen: false, bonusDone: false,
+  };
+
+  const buzz = p => { if (!S.vibe) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
+  const mult = streak => 1 + 0.5 * Math.min(streak, 4);
+  const arcadeLevel = hand => (hand <= 3 ? 1 : hand <= 6 ? 2 : hand <= 9 ? 3 : hand <= 12 ? 4 : 5);
+
+  /* ---------- rendering ---------- */
+  function cardEl(c, extra) {
+    const d = document.createElement("div");
+    d.className = `card s${c & 3}${extra ? " " + extra : ""}`;
+    d.setAttribute("role", "img");
+    d.setAttribute("aria-label", cardName(c));
+    d.innerHTML = `<span class="r">${RANKS[c >> 2]}</span><span class="su">${SYM[c & 3]}</span>`;
+    return d;
+  }
+
+  function renderTable(animate) {
+    const sp = S.spot;
+    let delay = 0;
+    const deal = c => { const el = cardEl(c, animate ? "deal" : ""); if (animate) { el.style.animationDelay = delay + "ms"; delay += 45; } return el; };
+    $("vilHand").replaceChildren(...sp.vil.map(deal));
+    $("board").replaceChildren(...sp.board.map(deal), Object.assign(document.createElement("div"), { className: "slot", textContent: "?" }));
+    $("heroHand").replaceChildren(...sp.hero.map(deal));
+    $("vilMade").textContent = handLabel(sp.v6);
+    $("heroMade").textContent = handLabel(sp.h6);
+  }
+
+  function renderHud() {
+    const arc = S.game === "arcade";
+    $("l1").textContent = arc ? "Score" : "Hands";
+    $("v1").textContent = arc ? S.score.toLocaleString() : String(S.done);
+    $("l2").textContent = arc ? "Combo" : "Exact";
+    $("v2").textContent = arc ? "x" + mult(S.streak) : (S.done ? Math.round(100 * S.exact / S.done) + "%" : "–");
+    $("l3").textContent = arc ? "Lives" : "Streak";
+    $("lives").hidden = !arc;
+    $("v3").hidden = arc;
+    $("v3").textContent = String(S.streak);
+    [...$("lives").children].forEach((el, i) => el.classList.toggle("lost", i >= S.lives));
+  }
+
+  // Ranks A–8 in the first block and 7–2 in the second, one row per suit.
+  function renderDeck(el, make) {
+    const blocks = [[12, 11, 10, 9, 8, 7, 6], [5, 4, 3, 2, 1, 0]];
+    el.replaceChildren(...blocks.map(ranks => {
+      const block = document.createElement("div");
+      block.className = "dblock";
+      for (let s = 0; s < 4; s++) {
+        const lab = document.createElement("div");
+        lab.className = "dsuit s" + s;
+        lab.textContent = SYM[s];
+        block.appendChild(lab);
+        for (let i = 0; i < 7; i++) {
+          const r = ranks[i];
+          block.appendChild(r === undefined ? document.createElement("div") : make(r * 4 + s));
+        }
+      }
+      return block;
+    }));
+  }
+  const cellHTML = c => `${RANKS[c >> 2]}<small>${SYM[c & 3]}</small>`;
+
+  function renderPick() {
+    renderDeck($("pickDeck"), c => {
+      const b = document.createElement("button");
+      b.type = "button";
+      const dead = S.spot.status[c] === "dead";
+      b.className = `dc s${c & 3}${dead ? " dead" : ""}${S.picks.has(c) ? " picked" : ""}`;
+      b.innerHTML = cellHTML(c);
+      b.dataset.c = c;
+      b.setAttribute("aria-label", cardName(c) + (dead ? ", on the table" : ""));
+      if (dead) b.disabled = true; else b.setAttribute("aria-pressed", S.picks.has(c) ? "true" : "false");
+      return b;
+    });
+    renderNote();
+  }
+
+  function renderNote(error) {
+    const n = $("note");
+    n.classList.toggle("err", !!error);
+    if (error) n.textContent = error;
+    else if (S.game === "arcade" && !S.armed) n.textContent = "The clock starts on your first tap.";
+    else if (S.style === "pick") n.textContent = `${S.picks.size} picked · tap again to unpick`;
+    else n.textContent = "Winning river cards. Splits don't count.";
+  }
+
+  function renderEntry(error) {
+    const e = $("entry");
+    e.textContent = S.entry === "" ? "–" : S.entry;
+    renderNote(error);
+    if (error) { e.classList.remove("shake"); void e.offsetWidth; e.classList.add("shake"); }
+  }
+
+  function renderTimer() {
+    const arc = S.game === "arcade" && S.phase === "play";
+    $("timer").hidden = !arc;
+    if (!arc) return;
+    const f = Math.max(0, S.timeLeft / S.limit);
+    $("timerFill").style.transform = `scaleX(${f})`;
+    $("timer").classList.toggle("low", S.timeLeft <= 5);
+  }
+
+  function showPlay() {
+    const lv = LEVELS[S.curLevel];
+    $("app").classList.toggle("picking", S.style === "pick");
+    $("playTop").hidden = false;
+    $("question").textContent = S.style === "count" ? "How many outs?" : "Tap all your outs";
+    $("stage").textContent = `Level ${S.curLevel} · ${lv.name}`;
+    $("entry").hidden = S.style !== "count";
+    $("countView").hidden = S.style !== "count";
+    $("pickView").hidden = S.style !== "pick";
+    $("revealView").hidden = true;
+    $("overView").hidden = true;
+    $("action").textContent = S.style === "count" ? "Lock in" : "Done";
+    renderEntry();
+    if (S.style === "pick") renderPick();
+    renderTimer();
+    renderHud();
+  }
+
+  let toastTimer = 0;
+  function toast(title, text) {
+    $("toastT").textContent = title;
+    $("toastD").textContent = text;
+    const t = $("toast");
+    t.hidden = true; void t.offsetWidth; t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+
+  /* ---------- timer ---------- */
+  let raf = 0, lastT = 0;
+  function startTimer() {
+    if (S.timerOn || S.game !== "arcade" || S.phase !== "play" || S.sheetOpen || document.hidden) return;
+    S.timerOn = true;
+    lastT = performance.now();
+    raf = requestAnimationFrame(tick);
+  }
+  function stopTimer() { S.timerOn = false; cancelAnimationFrame(raf); }
+  function tick(t) {
+    if (!S.timerOn) return;
+    S.timeLeft = Math.max(0, S.timeLeft - (t - lastT) / 1000);
+    lastT = t;
+    renderTimer();
+    if (S.timeLeft <= 0) { stopTimer(); lock(true); return; }
+    raf = requestAnimationFrame(tick);
+  }
+  function arm() {
+    if (S.game !== "arcade" || S.phase !== "play") return;
+    if (!S.armed) { S.armed = true; renderTimer(); renderNote(); }
+    startTimer();
+  }
+
+  /* ---------- flow ---------- */
+  function newRun(userStarted) {
+    stopTimer();
+    Object.assign(S, { score: 0, lives: 3, hand: 0, done: 0, exact: 0, streak: 0, bestStreak: 0, perLevel: freshLevels() });
+    S.bestAtStart = S.best;
+    S.armed = !!userStarted;
+    nextHand(true);
+  }
+
+  function nextHand(first) {
+    stopTimer();
+    S.hand++;
+    const lv = S.game === "arcade" ? arcadeLevel(S.hand) : S.level;
+    if (S.game === "arcade" && !first && lv !== S.curLevel) toast(`Level ${lv} · ${LEVELS[lv].name}`, LEVELS[lv].blurb);
+    S.curLevel = lv;
+    S.spot = genSpot(lv);
+    S.entry = "";
+    S.picks = new Set();
+    S.phase = "play";
+    S.limit = LEVELS[lv].time + (S.style === "pick" ? 10 : 0);
+    S.timeLeft = S.limit;
+    renderTable(true);
+    showPlay();
+    if (!first) window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    if (S.game === "arcade" && S.armed) startTimer();
+  }
+
+  function lock(timedOut) {
+    if (S.phase !== "play") return;
+    const a = S.spot;
+    let answer = null;
+    if (S.style === "count") {
+      if (S.entry === "" && !timedOut) { renderEntry("Tap a number first."); buzz(30); return; }
+      if (S.entry !== "") answer = parseInt(S.entry, 10);
+    }
+    stopTimer();
+    S.phase = "reveal";
+
+    let tierName, cls, errors, sub;
+    if (S.style === "count") {
+      const diff = answer === null ? Infinity : Math.abs(answer - a.outs);
+      errors = diff;
+      sub = answer === null ? `No answer · it's ${a.outs}` : `You said ${answer} · it's ${a.outs}`;
+    } else {
+      let found = 0, wrong = 0;
+      S.picks.forEach(c => { if (a.status[c] === "out") found++; else wrong++; });
+      errors = (a.outs - found) + wrong;
+      sub = `${found} of ${a.outs} found${wrong ? ` · ${wrong} wrong ${wrong === 1 ? "pick" : "picks"}` : ""}`;
+    }
+    if (errors === 0) { tierName = S.style === "count" ? "Exact" : "Perfect"; cls = "good"; }
+    else if (errors === 1) { tierName = S.style === "count" ? "Off by 1" : "1 mistake"; cls = "warn"; }
+    else { tierName = S.style === "count" ? (answer === null ? "Time" : `Off by ${errors}`) : `${errors} mistakes`; cls = "bad"; }
+    if (timedOut) sub += " · time ran out";
+
+    const arc = S.game === "arcade";
+    let pts = 0;
+    if (errors === 0) {
+      const m = mult(S.streak);
+      const speed = arc ? Math.round(S.timeLeft * 5) : 0;
+      pts = Math.round((100 + speed) * m);
+      S.streak++;
+      S.exact++;
+      if (arc) sub += ` · 100${speed ? ` + ${speed} speed` : ""}${m > 1 ? ` × ${m} combo` : ""}`;
+      buzz(18);
+    } else if (errors === 1) {
+      pts = 30;
+      if (S.streak > 1 && arc) sub += " · combo reset";
+      S.streak = 0;
+      buzz([25, 40, 25]);
+    } else {
+      S.streak = 0;
+      if (arc) { S.lives--; sub += " · you lose a chip"; }
+      buzz([70, 50, 70]);
+    }
+    S.bestStreak = Math.max(S.bestStreak, S.streak);
+    S.done++;
+    S.perLevel[S.curLevel].n++;
+    if (errors === 0) S.perLevel[S.curLevel].ok++;
+    if (arc) {
+      S.score += pts;
+      if (S.score > S.best) { S.best = S.score; store.set("er.best", S.best); }
+    }
+
+    $("verdict").textContent = tierName;
+    $("verdict").className = "verdict " + cls;
+    $("verdictSub").textContent = sub;
+    $("points").textContent = arc ? (pts ? "+" + pts : "0") : "";
+    renderRevealDeck();
+    renderExplain();
+    setupBonus();
+    $("playTop").hidden = true;
+    $("countView").hidden = true;
+    $("pickView").hidden = true;
+    $("revealView").hidden = false;
+    renderTimer();
+    renderHud();
+    $("action").textContent = arc && S.lives <= 0 ? "See results" : "Next hand";
+    $("console").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  }
+
+  function renderRevealDeck() {
+    const a = S.spot, pick = S.style === "pick";
+    const counts = { out: 0, dirty: 0, chop: 0, missed: 0, wrong: 0 };
+    renderDeck($("revealDeck"), c => {
+      const d = document.createElement("div");
+      const st = a.status[c];
+      let k = st;
+      if (pick && st !== "dead") {
+        const picked = S.picks.has(c);
+        if (st === "out") k = picked ? "out hit" : "missed";
+        else if (picked) k = "wrong";
+      }
+      k.split(" ").forEach(x => { if (counts[x] !== undefined) counts[x]++; });
+      d.className = `dc s${c & 3} ${k}`;
+      d.innerHTML = cellHTML(c);
+      d.setAttribute("aria-label", `${cardName(c)}: ${k.replace("hit", "").trim()}`);
+      return d;
+    });
+    const items = [];
+    const sw = (style, label) => `<span><i style="${style}"></i>${label}</span>`;
+    if (pick) {
+      counts.out && items.push(sw("background:var(--good)", `Found (${counts.out})`));
+      counts.missed && items.push(sw("border:2px dashed var(--good)", `Missed (${counts.missed})`));
+      counts.wrong && items.push(sw("border:2px solid var(--bad)", `Wrong pick (${counts.wrong})`));
+    } else if (a.outs) items.push(sw("background:var(--good)", `Out (${a.outs})`));
+    counts.dirty && items.push(sw("background:var(--bad)", `Dirty (${counts.dirty})`));
+    a.chops && items.push(sw("background:var(--warn)", `Splits the pot (${a.chops})`));
+    items.push(sw("background:rgba(243,236,217,.12)", "On the table"));
+    $("legend").innerHTML = items.join("");
+  }
+
+  function renderExplain() {
+    const { lines, quick } = explain(S.spot);
+    const h = $("hint");
+    h.replaceChildren();
+    if (quick) h.appendChild(Object.assign(document.createElement("p"), { className: "quick", textContent: quick }));
+    lines.forEach(t => h.appendChild(Object.assign(document.createElement("p"), { textContent: t })));
+  }
+
+  function setupBonus() {
+    const a = S.spot, box = $("bonus");
+    S.bonusDone = false;
+    if (a.outs === 0) { box.hidden = true; return; }
+    box.hidden = false;
+    const exactPct = 100 * a.outs / 44;
+    const c = Math.round(exactPct);
+    const opts = [c];
+    for (const d of [a.outs * 4, c + 12, c - 12, c + 22, c - 22, c + 7, c - 7]) {
+      if (opts.length < 4 && d >= 0 && d <= 100 && opts.every(o => Math.abs(o - d) >= 6)) opts.push(d);
+    }
+    opts.sort((x, y) => x - y);
+    $("bonusQ").textContent = `Bonus: with ${a.outs} ${a.outs === 1 ? "out" : "outs"} and one card to come, you win about…`;
+    $("bonusRes").textContent = S.game === "arcade" ? "Right answer: +25." : "";
+    $("bonusOpts").replaceChildren(...opts.map(v => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "bopt";
+      b.textContent = v + "%";
+      b.onclick = () => {
+        if (S.bonusDone) return;
+        S.bonusDone = true;
+        const right = v === c;
+        [...$("bonusOpts").children].forEach(x => { if (x.textContent === c + "%") x.classList.add("right"); });
+        if (!right) b.classList.add("wrongpick");
+        if (right && S.game === "arcade") {
+          S.score += 25;
+          if (S.score > S.best) { S.best = S.score; store.set("er.best", S.best); }
+          $("points").textContent = "+" + (parseInt($("points").textContent.replace("+", ""), 10) + 25 || 25);
+          renderHud();
+        }
+        buzz(right ? 18 : [40, 30, 40]);
+        const r2 = a.outs * 2;
+        $("bonusRes").textContent = `${right ? "Right. " : ""}${a.outs} winning cards out of 44 unseen = ${exactPct.toFixed(1)}%. The rule of 2 gives ${r2}%${r2 < exactPct - 3 ? ", a bit low with this many outs" : ""}.`;
+      };
+      return b;
+    }));
+  }
+
+  function showOver() {
+    stopTimer();
+    S.phase = "over";
+    $("playTop").hidden = true;
+    $("countView").hidden = true;
+    $("pickView").hidden = true;
+    $("revealView").hidden = true;
+    $("overView").hidden = false;
+    $("oScore").textContent = S.score.toLocaleString();
+    $("oBest").textContent = S.best.toLocaleString();
+    $("oExact").textContent = `${S.exact} / ${S.done}`;
+    $("oCombo").textContent = S.bestStreak;
+    $("newBest").hidden = !(S.score > S.bestAtStart && S.score > 0);
+    let weakest = null;
+    const bars = [];
+    for (let l = 1; l <= 5; l++) {
+      const p = S.perLevel[l];
+      if (!p.n) continue;
+      const rate = p.ok / p.n;
+      if (!weakest || rate < weakest.rate) weakest = { l, rate, p };
+      const col = rate >= .75 ? "var(--good)" : rate >= .5 ? "var(--warn)" : "var(--bad)";
+      bars.push(`<div class="lbar"><span>${l} · ${LEVELS[l].name}</span><div class="tk"><i style="width:${Math.max(4, rate * 100)}%;background:${col}"></i></div><output style="color:${col}">${p.ok}/${p.n}</output></div>`);
+    }
+    $("lbars").innerHTML = bars.join("");
+    const btn = $("practiceWeak");
+    if (weakest) {
+      $("overHint").textContent = `Your weakest level was ${weakest.l} · ${LEVELS[weakest.l].name}, with ${weakest.p.ok} of ${weakest.p.n} exact. Practice mode has no clock and no lives.`;
+      btn.textContent = `Practise level ${weakest.l}`;
+      btn.dataset.level = weakest.l;
+      btn.hidden = false;
+    } else {
+      $("overHint").textContent = "Play a few hands to see where you're strongest.";
+      btn.hidden = true;
+    }
+    renderTimer();
+    renderHud();
+    $("action").textContent = "Play again";
+    $("console").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  }
+
+  function onAction() {
+    if (S.phase === "play") lock(false);
+    else if (S.phase === "reveal") { if (S.game === "arcade" && S.lives <= 0) showOver(); else nextHand(false); }
+    else newRun(true);
+  }
+
+  /* ---------- input ---------- */
+  function pressKey(k) {
+    if (S.phase !== "play" || S.style !== "count") return;
+    arm();
+    if (k === "clear") S.entry = "";
+    else if (k === "back") S.entry = S.entry.slice(0, -1);
+    else S.entry = S.entry.length >= 2 ? k : (S.entry === "0" ? k : S.entry + k);
+    buzz(8);
+    renderEntry();
+  }
+
+  $("keypad").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) pressKey(b.dataset.k); });
+  $("pickDeck").addEventListener("click", e => {
+    const b = e.target.closest("[data-c]");
+    if (!b || b.disabled || S.phase !== "play") return;
+    arm();
+    const c = +b.dataset.c;
+    if (S.picks.has(c)) S.picks.delete(c); else S.picks.add(c);
+    b.classList.toggle("picked", S.picks.has(c));
+    b.setAttribute("aria-pressed", S.picks.has(c) ? "true" : "false");
+    renderNote();
+    buzz(8);
+  });
+  $("action").addEventListener("click", onAction);
+  $("practiceWeak").addEventListener("click", e => {
+    S.game = "practice";
+    S.level = +e.currentTarget.dataset.level || 1;
+    store.set("er.game", S.game); store.set("er.level", S.level);
+    newRun(true);
+  });
+
+  document.addEventListener("keydown", e => {
+    if (S.sheetOpen || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest && e.target.closest("button, input, label") && (e.key === "Enter" || e.key === " ")) return;
+    if (S.phase === "play" && S.style === "count") {
+      if (/^[0-9]$/.test(e.key)) { pressKey(e.key); return; }
+      if (e.key === "Backspace") { e.preventDefault(); pressKey("back"); return; }
+      if (e.key === "Escape") { pressKey("clear"); return; }
+    }
+    if (e.key === "Enter") { e.preventDefault(); onAction(); }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopTimer();
+    else if (S.armed) startTimer();
+  });
+
+  /* ---------- menu sheet ---------- */
+  const draft = {};
+  function syncSheet() {
+    [...$("gameSeg").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.v === draft.game ? "true" : "false"));
+    [...$("styleSeg").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.v === draft.style ? "true" : "false"));
+    $("levels").classList.toggle("off", draft.game !== "practice");
+    $("levelsLabel").textContent = draft.game === "practice" ? "Practice level" : "Arcade climbs through every level";
+    [...$("levels").children].forEach(b => b.setAttribute("aria-pressed", draft.game === "practice" && +b.dataset.v === draft.level ? "true" : "false"));
+  }
+  $("levels").replaceChildren(...LEVELS.slice(1).map((lv, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "lvl";
+    b.dataset.v = i + 1;
+    b.innerHTML = `<span class="n">${i + 1}</span><span class="t">${lv.name}</span><span class="d">${lv.blurb}</span>`;
+    return b;
+  }));
+  function openSheet() {
+    Object.assign(draft, { game: S.game, style: S.style, level: S.level });
+    $("fourChk").checked = S.four;
+    $("vibeChk").checked = S.vibe;
+    syncSheet();
+    S.sheetOpen = true;
+    stopTimer();
+    $("scrim").hidden = false;
+    $("sheet").hidden = false;
+    $("closeSheet").focus({ preventScroll: true });
+  }
+  function closeSheet() {
+    S.sheetOpen = false;
+    $("scrim").hidden = true;
+    $("sheet").hidden = true;
+    $("menuBtn").focus({ preventScroll: true });
+    if (S.armed) startTimer();
+  }
+  $("menuBtn").addEventListener("click", openSheet);
+  $("scrim").addEventListener("click", closeSheet);
+  $("closeSheet").addEventListener("click", closeSheet);
+  $("gameSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { draft.game = b.dataset.v; syncSheet(); } });
+  $("styleSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { draft.style = b.dataset.v; syncSheet(); } });
+  $("levels").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { draft.level = +b.dataset.v; draft.game = "practice"; syncSheet(); } });
+  $("fourChk").addEventListener("change", e => { S.four = e.target.checked; store.set("er.four", S.four); document.body.classList.toggle("four", S.four); });
+  $("vibeChk").addEventListener("change", e => { S.vibe = e.target.checked; store.set("er.vibe", S.vibe); buzz(15); });
+  $("startRun").addEventListener("click", () => {
+    Object.assign(S, { game: draft.game, style: draft.style, level: draft.level });
+    store.set("er.game", S.game); store.set("er.style", S.style); store.set("er.level", S.level);
+    closeSheet();
+    newRun(true);
+  });
+  document.addEventListener("keydown", e => { if (S.sheetOpen && e.key === "Escape") closeSheet(); });
+
+  /* ---------- boot ---------- */
+  window.claude?.hot?.snapshot?.(() => ({
+    game: S.game, style: S.style, level: S.level, score: S.score, lives: S.lives, hand: S.hand, done: S.done,
+    exact: S.exact, streak: S.streak, bestStreak: S.bestStreak, perLevel: S.perLevel, bestAtStart: S.bestAtStart,
+  }));
+
+  function start(data) {
+    document.body.classList.toggle("four", S.four);
+    if (data && data.game && data.lives > 0) {
+      ["game", "style", "level", "score", "lives", "done", "exact", "streak", "bestStreak", "perLevel", "bestAtStart"].forEach(k => { if (data[k] !== undefined) S[k] = data[k]; });
+      S.hand = Math.max(0, (data.hand || 1) - 1);
+      S.armed = false;
+      nextHand(true);
+    } else {
+      newRun(false);
+    }
+  }
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+(() => {
+  let prompt = null;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ghost";
+  btn.textContent = "Install app on this phone";
+  btn.hidden = true;
+  document.querySelector("#sheet .rules").before(btn);
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); prompt = e; btn.hidden = false; });
+  window.addEventListener("appinstalled", () => { btn.hidden = true; prompt = null; });
+  btn.addEventListener("click", async () => { if (!prompt) return; prompt.prompt(); await prompt.userChoice; prompt = null; btn.hidden = true; });
+})();
+</script>
+</body>
+</html>
